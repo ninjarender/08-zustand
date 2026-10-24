@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import {
   QueryClient,
@@ -5,6 +6,7 @@ import {
   dehydrate,
 } from "@tanstack/react-query";
 import { fetchNotes } from "@/lib/api";
+import { OG_IMAGE } from "@/lib/seo";
 import { TAGS, type NoteTag } from "@/types/note";
 import NotesClient from "./Notes.client";
 
@@ -17,6 +19,29 @@ type Props = {
 
 const isNoteTag = (value: string): value is NoteTag =>
   (TAGS as readonly string[]).includes(value);
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  // для невідомого тега — 404 і її метадані, а не «Notes: <будь-що>»
+  if (slug[0] !== "all" && !isNoteTag(slug[0])) {
+    notFound();
+  }
+  const filter = slug[0] === "all" ? "All notes" : slug[0];
+  const title = `Notes: ${filter} | NoteHub`;
+  const description = `Browse NoteHub notes filtered by: ${filter}.`;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url: `/notes/filter/${slug.join("/")}`,
+      siteName: "NoteHub",
+      images: [{ ...OG_IMAGE, alt: title }],
+    },
+  };
+}
 
 const NotesByTag = async ({ params }: Props) => {
   const { slug } = await params;

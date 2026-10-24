@@ -1,24 +1,33 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Roboto } from "next/font/google";
 import TanStackProvider from "@/components/TanStackProvider/TanStackProvider";
 import Header from "@/components/Header/Header";
 import Footer from "@/components/Footer/Footer";
+import { OG_IMAGE, SITE_URL } from "@/lib/seo";
 import "modern-normalize";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const roboto = Roboto({
+  subsets: ["latin", "cyrillic"],
+  weight: ["400", "700"],
+  variable: "--font-roboto",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "NoteHub",
-  description: "Create, search and manage your personal notes",
+  description:
+    "NoteHub is a simple and efficient app for creating, searching and managing personal notes.",
+  openGraph: {
+    title: "NoteHub",
+    description:
+      "A simple and efficient app for creating, searching and managing personal notes.",
+    url: "/",
+    siteName: "NoteHub",
+    images: [OG_IMAGE],
+    type: "website",
+  },
 };
 
 export default function RootLayout({
@@ -29,8 +38,8 @@ export default function RootLayout({
   modal: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
-      <body>
+    <html lang="en">
+      <body className={roboto.variable}>
         <TanStackProvider>
           <Header />
           {/* <main> — на кожній сторінці (стилі .main у CSS-модулях сторінок) */}

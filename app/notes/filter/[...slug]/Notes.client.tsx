@@ -2,12 +2,11 @@
 
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import { useDebouncedCallback } from "use-debounce";
 import SearchBox from "@/components/SearchBox/SearchBox";
 import Pagination from "@/components/Pagination/Pagination";
 import NoteList from "@/components/NoteList/NoteList";
-import Modal from "@/components/Modal/Modal";
-import NoteForm from "@/components/NoteForm/NoteForm";
 import Loader from "@/components/Loader/Loader";
 import ErrorMessage from "@/components/ErrorMessage/ErrorMessage";
 import { fetchNotes } from "@/lib/api";
@@ -21,7 +20,6 @@ interface NotesClientProps {
 const NotesClient = ({ tag }: NotesClientProps) => {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
-  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const { data, isFetching, isError, isSuccess } = useQuery({
     // тег — у ключі: для кожного фільтра свій кеш (undefined → "all", як у prefetch)
@@ -48,9 +46,6 @@ const NotesClient = ({ tag }: NotesClientProps) => {
     300,
   );
 
-  const openModal = () => setIsModalOpen(true);
-  const closeModal = () => setIsModalOpen(false);
-
   return (
     <main className={css.app}>
       <header className={css.toolbar}>
@@ -62,9 +57,9 @@ const NotesClient = ({ tag }: NotesClientProps) => {
             onPageChange={setPage}
           />
         )}
-        <button className={css.button} onClick={openModal}>
+        <Link href="/notes/action/create" className={css.button}>
           Create note +
-        </button>
+        </Link>
       </header>
       {isFetching && <Loader />}
       {isError && <ErrorMessage />}
@@ -72,11 +67,6 @@ const NotesClient = ({ tag }: NotesClientProps) => {
         <ErrorMessage message="No notes found." />
       )}
       {notes.length > 0 && <NoteList notes={notes} />}
-      {isModalOpen && (
-        <Modal onClose={closeModal}>
-          <NoteForm onClose={closeModal} />
-        </Modal>
-      )}
     </main>
   );
 };

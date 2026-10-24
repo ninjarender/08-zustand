@@ -1,128 +1,158 @@
 "use client";
 
-import { useId } from "react";
-import { Formik, Form, Field, ErrorMessage, type FormikHelpers } from "formik";
-import * as Yup from "yup";
+import { useId, useState, useSyncExternalStore } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createNote } from "@/lib/api";
-import { TAGS, type NoteTag } from "@/types/note";
+import { useNoteDraftStore } from "@/lib/store/noteStore";
+import { TAGS, type NewNote } from "@/types/note";
 import css from "./NoteForm.module.css";
 
-interface NoteFormProps {
-  onClose: () => void;
-}
+const subscribeNoop = () => () => {};
 
-interface NoteFormValues {
-  title: string;
-  content: string;
-  tag: NoteTag;
-}
-
-const initialValues: NoteFormValues = {
-  title: "",
-  content: "",
-  tag: "Todo",
-};
-
-const NoteSchema = Yup.object().shape({
-  title: Yup.string()
-    .min(3, "Title must be at least 3 characters")
-    .max(50, "Title is too long")
-    .required("Title is required"),
-  content: Yup.string().max(500, "Content is too long"),
-  tag: Yup.string().oneOf(TAGS, "Invalid tag").required("Tag is required"),
-});
-
-export default function NoteForm({ onClose }: NoteFormProps) {
+export default function NoteForm() {
   const fieldId = useId();
+  const router = useRouter();
   const queryClient = useQueryClient();
+  const { draft, setDraft, clearDraft } = useNoteDraftStore();
+  const [titleError, setTitleError] = useState("");
+
+  // на сервері localStorage немає: HTML мав би порожню чернетку, а клієнт —
+  // збережену, і defaultValue розійшлися б при гідратації (тема 15, §8.2).
+  // Тому поля рендеримо лише на клієнті після гідратації: getServerSnapshot
+  // (false) діє на сервері й під час гідратації, далі — true
+  const isMounted = useSyncExternalStore(
+    subscribeNoop,
+    () => true,
+    () => false,
+  );
+
+  // кожна зміна поля одразу йде в чернетку (name поля = ключ NewNote)
+  const handleChange = (
+    event: React.ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >,
+  ) => {
+    setDraft({
+      ...draft,
+      [event.target.name]: event.target.value,
+    });
+  };
 
   const mutation = useMutation({
     mutationFn: createNote,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notes"] });
+      // списки зараз неактивні (ми на сторінці створення), а NotesClient після
+      // повернення не перезапитує дані (refetchOnMount: false) — тож оновлюємо всі
+      queryClient.invalidateQueries({
+        queryKey: ["notes"],
+        refetchType: "all",
+      });
+      clearDraft();
+      goBack();
     },
   });
 
-  const handleSubmit = (
-    values: NoteFormValues,
-    actions: FormikHelpers<NoteFormValues>,
-  ) => {
-    mutation.mutate(values, {
-      // скидаємо форму лише після успіху — при помилці дані лишаються
-      onSuccess: () => {
-        actions.resetForm();
-        onClose();
-      },
-    });
+  // на маршрут, з якого відкрили створення; якщо сторінку відкрили напряму
+  // (нова вкладка, закладка) — історії в застосунку немає, тож до списку
+  const goBack = () => {
+    if (window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/notes/filter/all");
+    }
   };
 
+  const handleSubmit = (formData: FormData) => {
+    // as лише «вірить» TS: тому name полів збігаються з ключами NewNote,
+    // а tag обмежений <select> зі списку TAGS
+    const values = Object.fromEntries(formData) as unknown as NewNote;
+
+    // minLength браузер перевіряє лише для введеного вручну тексту, а не для
+    // відновленого з чернетки — тому довжину заголовка перевіряємо й тут
+    if (values.title.trim().length < 3) {
+      setTitleError("Title must be at least 3 characters");
+      return;
+    }
+    setTitleError("");
+    mutation.mutate(values);
+  };
+
+  // Cancel чернетку не очищає — її можна дописати пізніше
+  const handleCancel = () => goBack();
+
+  if (!isMounted) return null;
+
   return (
-    <Formik
-      initialValues={initialValues}
-      validationSchema={NoteSchema}
-      onSubmit={handleSubmit}
-    >
-      <Form className={css.form}>
-        <div className={css.formGroup}>
-          <label htmlFor={`${fieldId}-title`}>Title</label>
-          <Field
-            id={`${fieldId}-title`}
-            type="text"
-            name="title"
-            className={css.input}
-          />
-          <ErrorMessage name="title" component="span" className={css.error} />
-        </div>
+    <form className={css.form} action={handleSubmit}>
+      <div className={css.formGroup}>
+        <label htmlFor={`${fieldId}-title`}>Title</label>
+        <input
+          id={`${fieldId}-title`}
+          type="text"
+          name="title"
+          className={css.input}
+          defaultValue={draft.title}
+          onChange={handleChange}
+          required
+          minLength={3}
+          maxLength={50}
+        />
+        {titleError && <span className={css.error}>{titleError}</span>}
+      </div>
 
-        <div className={css.formGroup}>
-          <label htmlFor={`${fieldId}-content`}>Content</label>
-          <Field
-            as="textarea"
-            id={`${fieldId}-content`}
-            name="content"
-            rows={8}
-            className={css.textarea}
-          />
-          <ErrorMessage name="content" component="span" className={css.error} />
-        </div>
+      <div className={css.formGroup}>
+        <label htmlFor={`${fieldId}-content`}>Content</label>
+        <textarea
+          id={`${fieldId}-content`}
+          name="content"
+          rows={8}
+          className={css.textarea}
+          defaultValue={draft.content}
+          onChange={handleChange}
+          maxLength={500}
+        />
+      </div>
 
-        <div className={css.formGroup}>
-          <label htmlFor={`${fieldId}-tag`}>Tag</label>
-          <Field
-            as="select"
-            id={`${fieldId}-tag`}
-            name="tag"
-            className={css.select}
-          >
-            {TAGS.map((tag) => (
-              <option key={tag} value={tag}>
-                {tag}
-              </option>
-            ))}
-          </Field>
-          <ErrorMessage name="tag" component="span" className={css.error} />
-        </div>
+      <div className={css.formGroup}>
+        <label htmlFor={`${fieldId}-tag`}>Tag</label>
+        <select
+          id={`${fieldId}-tag`}
+          name="tag"
+          className={css.select}
+          defaultValue={draft.tag}
+          onChange={handleChange}
+        >
+          {TAGS.map((tag) => (
+            <option key={tag} value={tag}>
+              {tag}
+            </option>
+          ))}
+        </select>
+      </div>
 
-        {mutation.isError && (
-          <span className={css.error}>
-            Could not create the note, please try again.
-          </span>
-        )}
+      {mutation.isError && (
+        <span className={css.error}>
+          Could not create the note, please try again.
+        </span>
+      )}
 
-        <div className={css.actions}>
-          <button type="button" className={css.cancelButton} onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className={css.submitButton}
-            disabled={mutation.isPending}
-          >
-            {mutation.isPending ? "Creating..." : "Create note"}
-          </button>
-        </div>
-      </Form>
-    </Formik>
+      <div className={css.actions}>
+        <button
+          type="button"
+          className={css.cancelButton}
+          onClick={handleCancel}
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          className={css.submitButton}
+          disabled={mutation.isPending}
+        >
+          {mutation.isPending ? "Creating..." : "Create note"}
+        </button>
+      </div>
+    </form>
   );
 }
